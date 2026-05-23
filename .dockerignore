@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gemini/
+database/
+frontend/static/uploads/
+*.db
+.DS_Store
+.gitignore

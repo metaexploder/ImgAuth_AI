@@ -2,11 +2,11 @@ def calculate_final_score(fn, md, ml):
     bucket = fn.get("bucket", "neutral_or_real_hint")
 
     if bucket == "strong_ai_trigger":
-        w_fn, w_md, w_ml = 0.25, 0.15, 0.60
+        w_fn, w_md, w_ml = 0.05, 0.15, 0.80
         mode = "Filename-flagged mode"
         mode_detail = "AI keyword in filename but pixel analysis still dominates"
     elif bucket == "medium_ai_suspicion":
-        w_fn, w_md, w_ml = 0.10, 0.20, 0.70
+        w_fn, w_md, w_ml = 0.02, 0.18, 0.80
         mode = "Suspicious filename mode"
         mode_detail = "Suspicious filename patterns, models and forensics drive the verdict"
     else:

@@ -9,6 +9,10 @@ MODEL_CACHE = {}
 
 def load_models():
     from transformers import pipeline
+    import torch
+
+    device_id = 0 if torch.cuda.is_available() else -1
+    print(f"[ImgAuth] Using device: {'GPU (cuda:0)' if device_id == 0 else 'CPU'}")
 
     model_ids = [
         ("umm_maybe", "umm-maybe/AI-image-detector"),
@@ -20,7 +24,7 @@ def load_models():
             try:
                 print(f"[ImgAuth] Loading model: {model_id}")
                 MODEL_CACHE[key] = pipeline(
-                    "image-classification", model=model_id, device=-1, framework="pt"
+                    "image-classification", model=model_id, device=device_id, framework="pt"
                 )
             except Exception as e:
                 print(f"[ImgAuth] Failed to load {model_id}: {e}")
@@ -59,7 +63,8 @@ def run_model_multiscale(pipe, img_full):
     result_512 = run_model(pipe, img_512)
 
     w, h = img_full.size
-    if w > 600 and h > 600:
+    import torch
+    if w > 600 and h > 600 and torch.cuda.is_available():
         crop_size = min(w, h, 384)
         cx, cy = w // 2, h // 2
         half = crop_size // 2
@@ -125,7 +130,9 @@ def extract_vit_features_and_attentions(img):
         processor = pipe.image_processor
 
         inputs = processor(images=img, return_tensors="pt")
-        inputs = {k: v.to("cpu") for k, v in inputs.items()}
+        # Match device of inputs to device of model (CPU or GPU)
+        model_device = next(model.parameters()).device
+        inputs = {k: v.to(model_device) for k, v in inputs.items()}
 
         with torch.no_grad():
             outputs = model(**inputs, output_attentions=True, output_hidden_states=True)

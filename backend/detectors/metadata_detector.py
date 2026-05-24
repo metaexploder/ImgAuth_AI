@@ -128,7 +128,6 @@ def analyze_metadata(image_bytes: bytes) -> dict:
             (1152, 896), (896, 1152),
             (1536, 1024), (1024, 1536),
             (1024, 576), (576, 1024),
-            (1920, 1080),
         ]
         if (w, h) in common_ai_sizes:
             ai_pts += 8

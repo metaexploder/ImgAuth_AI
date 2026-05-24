@@ -1,18 +1,7 @@
 def calculate_final_score(fn, md, ml):
-    bucket = fn.get("bucket", "neutral_or_real_hint")
-
-    if bucket == "strong_ai_trigger":
-        w_fn, w_md, w_ml = 0.05, 0.15, 0.80
-        mode = "Filename-flagged mode"
-        mode_detail = "AI keyword in filename but pixel analysis still dominates"
-    elif bucket == "medium_ai_suspicion":
-        w_fn, w_md, w_ml = 0.02, 0.18, 0.80
-        mode = "Suspicious filename mode"
-        mode_detail = "Suspicious filename patterns, models and forensics drive the verdict"
-    else:
-        w_fn, w_md, w_ml = 0.00, 0.12, 0.88
-        mode = "Standard analysis mode"
-        mode_detail = "No filename triggers, deep learning models and forensics drive the verdict"
+    w_fn, w_md, w_ml = 0.00, 0.10, 0.90
+    mode = "Standard analysis mode"
+    mode_detail = "Deep learning models and forensics drive the verdict, metadata is secondary"
 
     def share(a, r):
         t = a + r
@@ -20,9 +9,31 @@ def calculate_final_score(fn, md, ml):
             return 50.0, 50.0
         return (a / t) * 100, (r / t) * 100
 
-    fn_a, fn_r = share(fn.get("ai_points", 0), fn.get("real_points", 0))
-    md_a, md_r = share(md.get("ai_points", 0), md.get("real_points", 0))
-    ml_a, ml_r = share(ml.get("ai_points", 0), ml.get("real_points", 0))
+    def share_md(a, r):
+        # Smoothing baseline to prevent small metadata points from dominating
+        baseline = 30.0
+        t = a + r + baseline
+        return ((a + baseline / 2) / t) * 100, ((r + baseline / 2) / t) * 100
+
+    fn_a, fn_r = 0.0, 100.0
+    md_a, md_r = share_md(md.get("ai_points", 0), md.get("real_points", 0))
+
+    # Incorporate Visual Style & Symmetry analysis
+    st = ml.get("style", {})
+    st_ai_points = st.get("ai_points", 0)
+    st_real_points = st.get("real_points", 0)
+
+    def share_st(a, r):
+        baseline = 20.0
+        t = a + r + baseline
+        return ((a + baseline / 2) / t) * 100, ((r + baseline / 2) / t) * 100
+
+    st_a, st_r = share_st(st_ai_points, st_real_points)
+    base_ml_a, base_ml_r = share(ml.get("ai_points", 0), ml.get("real_points", 0))
+
+    # Grouped Models/Forensics layer combines models (90%) and style analysis (10%)
+    ml_a = base_ml_a * 0.90 + st_a * 0.10
+    ml_r = base_ml_r * 0.90 + st_r * 0.10
 
     ai_s = fn_a * w_fn + md_a * w_md + ml_a * w_ml
     real_s = fn_r * w_fn + md_r * w_md + ml_r * w_ml
@@ -32,7 +43,7 @@ def calculate_final_score(fn, md, ml):
 
     forensic_override = False
     forensics = ml.get("forensics", {})
-    if forensics and bucket == "neutral_or_real_hint":
+    if forensics:
         kurt_ai = forensics.get("kurtosis", {}).get("ai_prob", 0.5)
         dfi_ai = forensics.get("dfi", {}).get("ai_prob", 0.5)
         model_ai = ml.get("weighted_ai_prob", 0.5)
@@ -72,11 +83,11 @@ def calculate_final_score(fn, md, ml):
     breakdown = [
         {
             "layer": "Filename Analysis",
-            "ai_pts": fn.get("ai_points", 0),
-            "real_pts": fn.get("real_points", 0),
-            "weight_pct": f"{int(w_fn * 100)}%",
-            "signals": fn.get("signals", []),
-            "mode": fn.get("priority_note", ""),
+            "ai_pts": 0,
+            "real_pts": 0,
+            "weight_pct": "0%",
+            "signals": ["Filename analysis disabled."],
+            "mode": "Layer deactivated.",
         },
         {
             "layer": "Metadata Analysis",
@@ -88,13 +99,13 @@ def calculate_final_score(fn, md, ml):
         },
         {
             "layer": "AI Model and Forensic Detectors",
-            "ai_pts": ml.get("ai_points", 0),
-            "real_pts": ml.get("real_points", 0),
+            "ai_pts": int(ml_a),
+            "real_pts": int(ml_r),
             "weight_pct": f"{int(w_ml * 100)}%",
             "signals": ml.get("signals", []),
             "votes": ml.get("votes", []),
             "forensics": ml.get("forensics", {}),
-            "mode": ml.get("priority_note", ""),
+            "mode": ml.get("priority_note", "") + " With visual style & symmetry checks.",
         },
     ]
 

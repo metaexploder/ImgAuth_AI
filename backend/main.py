@@ -5,10 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from datetime import datetime
 from pathlib import Path
-from backend.detectors.filename_detector import analyze_filename
+
 from backend.detectors.image_detector import analyze_image_models
 from backend.detectors.metadata_detector import analyze_metadata
 from backend.detectors.scoring_engine import calculate_final_score
+from backend.detectors.style_detector import analyze_visual_style
+from PIL import Image
+import io
 
 app = FastAPI(title="ImgAuth AI API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -21,6 +24,13 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND / "static")), name="stat
 @app.on_event("startup")
 async def startup():
     print("ImgAuth AI started -> http://localhost:5000")
+    try:
+        print("[ImgAuth] Preloading models on startup...")
+        from backend.detectors.image_detector import load_models
+        load_models()
+        print("[ImgAuth] Models preloaded successfully.")
+    except Exception as e:
+        print(f"[ImgAuth] Warning: failed to preload models: {e}")
 
 
 @app.get("/")
@@ -36,9 +46,20 @@ async def detect(file: UploadFile = File(...)):
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(400, "File too large. Max 10 MB.")
 
-    fn = analyze_filename(file.filename)
+    fn = {}
     md = analyze_metadata(contents)
     ml = analyze_image_models(contents)
+    
+    try:
+        img_full = Image.open(io.BytesIO(contents)).convert("RGB")
+        st = analyze_visual_style(img_full)
+    except Exception as e:
+        st = {"ai_points": 0, "real_points": 0, "signals": [f"[ERROR] Style loading: {str(e)[:50]}"]}
+
+    ml["style"] = st
+    if "signals" in ml and "signals" in st:
+        ml["signals"].extend(st["signals"])
+
     res = calculate_final_score(fn, md, ml)
 
     return JSONResponse({
